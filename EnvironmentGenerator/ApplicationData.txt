@@ -1,0 +1,15 @@
+Window width: 1600
+Window height: 900
+Window mode: 0
+Show FPS: 1
+Max FPS: 300
+VSync: 0
+MSAA: 16
+Master volume: 100
+Music volume: 100
+SFX volume: 100
+Console text size: 12
+ConsoleTextAlpha (0-255): 230
+GUI text size: 12
+GUI text font path: Fonts/Anonymous.ttf
+Data directory: data/

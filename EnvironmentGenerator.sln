@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 2013
+VisualStudioVersion = 12.0.30501.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "EnvironmentGenerator", "EnvironmentGenerator\EnvironmentGenerator.vcxproj", "{FC5D61F0-3441-4A5C-8B35-8C8CE0DCF11A}"
+	ProjectSection(ProjectDependencies) = postProject
+		{545A88BB-7447-428B-8A73-A1E8F2BBDB33} = {545A88BB-7447-428B-8A73-A1E8F2BBDB33}
+	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "SpehsEngine", "..\SpehsEngine\SpehsEngine\SpehsEngine.vcxproj", "{545A88BB-7447-428B-8A73-A1E8F2BBDB33}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Win32 = Debug|Win32
+		Release|Win32 = Release|Win32
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{FC5D61F0-3441-4A5C-8B35-8C8CE0DCF11A}.Debug|Win32.ActiveCfg = Debug|Win32
+		{FC5D61F0-3441-4A5C-8B35-8C8CE0DCF11A}.Debug|Win32.Build.0 = Debug|Win32
+		{FC5D61F0-3441-4A5C-8B35-8C8CE0DCF11A}.Release|Win32.ActiveCfg = Release|Win32
+		{FC5D61F0-3441-4A5C-8B35-8C8CE0DCF11A}.Release|Win32.Build.0 = Release|Win32
+		{545A88BB-7447-428B-8A73-A1E8F2BBDB33}.Debug|Win32.ActiveCfg = Debug|Win32
+		{545A88BB-7447-428B-8A73-A1E8F2BBDB33}.Debug|Win32.Build.0 = Debug|Win32
+		{545A88BB-7447-428B-8A73-A1E8F2BBDB33}.Release|Win32.ActiveCfg = Release|Win32
+		{545A88BB-7447-428B-8A73-A1E8F2BBDB33}.Release|Win32.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
