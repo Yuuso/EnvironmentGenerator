@@ -1,4 +1,6 @@
 
+#include "Environment.h"
+
 #include <SpehsEngine/SpehsEngine.h>
 #include <SpehsEngine/Window.h>
 #include <SpehsEngine/Console.h>
@@ -23,6 +25,8 @@ void init()
 	batchManager = new spehs::BatchManager(camera);
 	spehs::setActiveBatchManager(batchManager);
 	mainWindow->clearColor(0.0f, 0.0f, 0.0f, 1.0f);
+
+	environment = new Environment(0);
 }
 void uninit()
 {

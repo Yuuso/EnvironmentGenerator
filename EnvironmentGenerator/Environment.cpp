@@ -2,6 +2,7 @@
 #include "Environment.h"
 
 
+Environment* environment;
 Environment::Environment(const unsigned int &_seed)
 {
 	worldSeed = _seed;
