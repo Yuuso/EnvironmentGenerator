@@ -14,15 +14,10 @@ namespace spehs{ class Polygon; }
 
 struct SECTORDATA
 {
-	SectorDataType density;
+	SectorDataType density; //Void areas in Spehs
 	SectorDataType temperature;
 	SectorDataType technology;
-};
-
-enum SECTORTYPE : bool
-{
-	MAJOR = true,
-	MINOR = false
+	//Something for asteroid building?
 };
 
 class Sector
@@ -33,8 +28,7 @@ public:
 	~Sector();
 
 	void buildSector(Sector* _parent, const uint16_t _x, const uint16_t _y, const SECTORTYPE _sectorbuild, const uint8_t _layer);
-	SECTORDATA getData(const uint16_t _x, const uint16_t _y);
-	void renderVisuals(const bool _state, const unsigned char _alpha = 255);
+	SECTORDATA* getData();
 
 private:
 	void buildData(const SECTORDATA _parentData, const uint16_t _size);
@@ -44,12 +38,11 @@ private:
 	uint32_t localSeed;
 	uint16_t factor;
 	SECTORTYPE type;
-	SECTORDATA** rawdata;
+
+	SECTORDATA rawdata;
+	SECTORDATA* data;
 
 	Sector* parent;
 	uint16_t xInP, yInP;
-
-	std::vector<spehs::Polygon*>* primaryVisuals;
-	std::vector<spehs::Polygon*>* secondaryVisuals;
 };
 

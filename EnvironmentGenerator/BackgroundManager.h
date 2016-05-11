@@ -3,6 +3,10 @@
 
 #include "Environment.h"
 
+#include <SpehsEngine/WorldPosition.h>
+
+#include <vector>
+
 
 class BackgroundManager
 {
@@ -13,6 +17,6 @@ public:
 	void update();
 
 private:
-	SectorPosition currentPosition;
+	std::vector<spehs::WorldPosition> maintainedPositions;
 };
 
