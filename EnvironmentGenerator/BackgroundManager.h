@@ -17,6 +17,5 @@ public:
 	void update();
 
 private:
-	std::vector<spehs::WorldPosition> maintainedPositions;
 };
 

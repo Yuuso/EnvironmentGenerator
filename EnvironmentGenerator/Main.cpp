@@ -15,6 +15,7 @@ static bool run = true;
 
 spehs::Camera2D* camera;
 spehs::BatchManager* batchManager;
+Environment* environment;
 
 void init()
 {
@@ -26,12 +27,13 @@ void init()
 	spehs::setActiveBatchManager(batchManager);
 	mainWindow->clearColor(0.0f, 0.0f, 0.0f, 1.0f);
 
-	environment = new Environment(0);
+	environment = new Environment(0, &spehs::WorldPosition());
 }
 void uninit()
 {
 	delete batchManager;
 	delete camera;
+	delete environment;
 	spehs::uninitialize();
 }
 bool input()
@@ -81,6 +83,7 @@ bool update()
 	if (!input())
 		return false;
 	camera->update();
+	environment->update();
 	spehs::console::update();
 
 	return true;

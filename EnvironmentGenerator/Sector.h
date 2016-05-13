@@ -1,48 +1,38 @@
 
 #pragma once
 
+#include "Environment.h"
+
 #include <stdint.h>
 #include <vector>
+#include <memory>
 
-#define MAJOR_SIZE 4096
-#define MINOR_SIZE 256
-
-
-typedef uint8_t SectorDataType;
 
 namespace spehs{ class Polygon; }
 
-struct SECTORDATA
-{
-	SectorDataType density; //Void areas in Spehs
-	SectorDataType temperature;
-	SectorDataType technology;
-	//Something for asteroid building?
-};
 
 class Sector
 {
+	friend class Environment;
 public:
-	Sector();
-	Sector(Sector* _parent, const uint16_t _x, const uint16_t _y, const SECTORTYPE _sectorbuild, const uint8_t _layer);
+	Sector(const std::shared_ptr<Sector>& _parent, const uint16_t _x, const uint16_t _y, const uint32_t _localSeed, const uint8_t _layer, Environment* _creator);
 	~Sector();
 
-	void buildSector(Sector* _parent, const uint16_t _x, const uint16_t _y, const SECTORTYPE _sectorbuild, const uint8_t _layer);
-	SECTORDATA* getData();
+	std::shared_ptr<SECTORDATA> getData();
+	bool checkPosition(const uint16_t _x, const uint16_t _y);
 
-private:
-	void buildData(const SECTORDATA _parentData, const uint16_t _size);
-	void clearData();
-	void clearVisuals();
-
+protected:
+	uint16_t layer;
+	uint16_t xInP;
+	uint16_t yInP;
 	uint32_t localSeed;
-	uint16_t factor;
-	SECTORTYPE type;
 
 	SECTORDATA rawdata;
-	SECTORDATA* data;
+	std::shared_ptr<SECTORDATA> data;
+	std::shared_ptr<Sector> parent;
+	Environment* creator;
 
-	Sector* parent;
-	uint16_t xInP, yInP;
+	//DEBUG VISUAL
+	spehs::Polygon* visual;
 };
 
