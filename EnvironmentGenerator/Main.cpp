@@ -10,12 +10,19 @@
 #include <SpehsEngine/InputManager.h>
 #include <SpehsEngine/Time.h>
 
+#include <iostream>
+
+
+extern int64_t sectorAllocations;
+extern int64_t sectorDeallocations;
+
 
 static bool run = true;
 
 spehs::Camera2D* camera;
 spehs::BatchManager* batchManager;
 Environment* environment;
+spehs::WorldPosition location(0, 0);
 
 void init()
 {
@@ -27,7 +34,7 @@ void init()
 	spehs::setActiveBatchManager(batchManager);
 	mainWindow->clearColor(0.0f, 0.0f, 0.0f, 1.0f);
 
-	environment = new Environment(0, &spehs::WorldPosition());
+	environment = new Environment(0, &location);
 }
 void uninit()
 {
@@ -44,7 +51,7 @@ bool input()
 
 #pragma region CAMERA MOVEMENT
 	static float cameraMoveSpeed;
-	static float cameraZoomSpeed = spehs::getDeltaTime().asSeconds;
+	static float cameraZoomSpeed = 0.01f;
 	cameraMoveSpeed = 1000.0f * spehs::getDeltaTime().asSeconds;
 	if (inputManager->isKeyDown(KEYBOARD_LEFT))
 	{
@@ -83,6 +90,7 @@ bool update()
 	if (!input())
 		return false;
 	camera->update();
+	location.setPosition(camera->position.x, camera->position.y);
 	environment->update();
 	spehs::console::update();
 
@@ -108,5 +116,9 @@ int main(char argc, char** argv)
 		spehs::endFPS();
 	}
 	uninit();
+
+	std::cout << "Sector Allocations: " << sectorAllocations - sectorDeallocations << "/" << sectorAllocations << std::endl;
+	std::cin.ignore();
+
 	return 0;
 }

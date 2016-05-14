@@ -1,8 +1,6 @@
 
 #pragma once
 
-#include "Sector.h"
-
 #include <SpehsEngine/RNG.h>
 
 #include <stdint.h>
@@ -15,15 +13,14 @@
 #define MINOR_SIZE 256
 
 //Size of the sectors side
-#define MAJOR0_SIZE (INT64_MAX/MAJOR_SIZE)
+#define MAJOR0_SIZE (UINT64_MAX/MAJOR_SIZE)
 #define MAJOR1_SIZE (MAJOR0_SIZE/MAJOR_SIZE)
 #define MAJOR2_SIZE (MAJOR1_SIZE/MAJOR_SIZE)
 #define MAJOR3_SIZE (MAJOR2_SIZE/MAJOR_SIZE)
 #define MINOR0_SIZE (MAJOR3_SIZE/MINOR_SIZE)
-#define MINOR1_SIZE (MINOR0_SIZE/MINOR_SIZE)
-
 
 namespace spehs{ class WorldPosition; }
+class Sector;
 
 
 /*
@@ -36,8 +33,7 @@ struct EnvironmentData
 	std::vector<std::shared_ptr<Sector>> major2; //Divides into majors
 	std::vector<std::shared_ptr<Sector>> major3; //Divides into minors
 
-	std::vector<std::shared_ptr<Sector>> minor0; //Divides into minors
-	std::vector<std::shared_ptr<Sector>> minor1; //Field Sectors
+	std::vector<std::shared_ptr<Sector>> minor0; //Field Sectors
 };
 
 enum SECTORTYPE : uint8_t
@@ -48,13 +44,13 @@ enum SECTORTYPE : uint8_t
 	MAJOR3 = 3,
 
 	MINOR0 = 4,
-	MINOR1 = 5,
 };
 
 typedef uint8_t SectorDataType;
 
 struct SECTORDATA
 {
+	SECTORDATA();
 	SectorDataType density;
 	SectorDataType temperature;
 	SectorDataType technology;
@@ -84,7 +80,7 @@ protected:
 
 	enum DIRECTION : uint8_t { DOWN, UP, RIGHT, LEFT };
 	std::shared_ptr<Sector> getAdjacent(const std::shared_ptr<Sector>& _sector, const DIRECTION _direction);
-	spehs::WorldPosition getWorldPosition(const std::shared_ptr<Sector>& _sector, const int16_t _xInc = 0, const int16_t _yInc = 0);
+	spehs::WorldPosition getWorldPosition(const Sector& _sector, const int16_t _xInc = 0, const int16_t _yInc = 0);
 
 	EnvironmentData data;
 
