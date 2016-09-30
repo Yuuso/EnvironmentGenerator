@@ -6,93 +6,153 @@
 #include <thread>
 
 
-const float SECTOR_TIMER(60.0f);
+const int SECTOR_TIMER(60);
 
 
-
-std::mutex envDeleteMutex;//To make sure timers stop correctly if environment is deleted
-void sectorTimer(Sector* _sector)
+bool SectorTimer::end = false;
+std::vector<Sector*> SectorTimer::sectors = std::vector<Sector*>();
+std::mutex sectorMutex;//To make sure timers stop correctly if environment is deleted
+void SectorTimer::sectorTimer()
 {
-	envDeleteMutex.lock();
-	if (!Environment::instance)
+	auto dropAll = [&]()
 	{
-		envDeleteMutex.unlock();
-		return;
-	}
+		for (unsigned i = 0; i < sectors.size(); i++)
+		{
+			if (sectors[i]->getNumChildren() == 0)
+			{
+				if (!sectors[i]->drop())
+				{
+					sectors[i]->deleteFromParent();
+					delete sectors[i];
+					sectors[i] = sectors.back();
+					sectors.pop_back();
+					i--;
+				}
+			}
+		}
+	};
+
+	sectorMutex.lock();
 	do
 	{
-		_sector->drop();
-		envDeleteMutex.unlock();
+		dropAll();
+		sectorMutex.unlock();
 		std::this_thread::sleep_for(std::chrono::seconds(SECTOR_TIMER));
-		envDeleteMutex.lock();
-		if (!Environment::instance)
-		{
-			envDeleteMutex.unlock();
-			return;
-		}
-	} while (_sector->isActive());
-	Environment::instance->deleteSector(_sector);
-	envDeleteMutex.unlock();
+		sectorMutex.lock();
+	} while (!end);
+
+	for (unsigned i = 0; i < sectors.size(); i++)
+	{
+		delete sectors[i];
+	}
+	sectors.clear();
+	sectorMutex.unlock();
+}
+void SectorTimer::deleteAll()
+{
+	sectorMutex.lock();
+	end = true;
+	sectorMutex.unlock();
+}
+void SectorTimer::add(Sector* _sector)
+{
+	sectorMutex.lock();
+	sectors.push_back(_sector);
+	sectorMutex.unlock();
 }
 
 
-Sector::Sector(const unsigned char _layer, const unsigned char _xInParent, const unsigned char _yInParent, EnvironmentData* _parentPixel) : position(_layer, _xInParent, _yInParent), active(true)
+/*
+	SECTORS
+*/
+Sector::Sector(const EnvironmentData &_data, Sector* _parent, const LayerPosition &_positionInParent) : data(_data), parent(_parent), positionInParent(_positionInParent), active(true)
 {
-	if (_parentPixel)
-	{
-		//generate sector based on parent
 
-		std::thread removeTimer(sectorTimer, this);
-	}
-	else
-	{
-		//create 0 sector
-	}
+	SectorTimer::add(this);
 }
 Sector::~Sector()
 {
 
 }
 
-bool Sector::operator==(const Sector &_other)
+EnvironmentData Sector::getData(const ChunkPosition &_position, const uint8_t _layerCounter)
 {
-	return position == _other.position;
+	use();
+	return data;
 }
-
-const unsigned char Sector::getLayer() const
+void Sector::deleteFromParent()
 {
-	return position.layer;
-}
-SectorPosition Sector::getPosition() const
-{
-	return position;
-}
-EnvironmentData Sector::getData(const unsigned char &_x, const unsigned char &_y) const
-{
-	return data[_x][_y];
+	if (!parent)
+	{
+		delete Environment::instance->layer0Sectors[positionInParent.x][positionInParent.y];
+		Environment::instance->layer0Sectors[positionInParent.x][positionInParent.y] = nullptr;
+	}
+	else
+	{
+		delete parent->getAsMinor()->children[positionInParent.x][positionInParent.y];
+		parent->getAsMinor()->children[positionInParent.x][positionInParent.y] = nullptr;
+		parent->getAsMinor()->numChildren--;
+	}
 }
 void Sector::use()
 {
+	activeMutex.lock();
 	active = true;
+	activeMutex.unlock();
 }
-void Sector::drop()
-{
-	active = false;
-}
-bool Sector::is(const unsigned char _layer, const unsigned char _xInParent, const unsigned char _yInParent)
-{
-	return position.layer == _layer && position.xInParent == _xInParent && position.yInParent == _yInParent;
-}
-bool Sector::isActive()
+bool Sector::drop()
 {
 	activeMutex.lock();
 	bool value = active;
+	active = false;
 	activeMutex.unlock();
 	return value;
 }
 
+MinorSector::MinorSector(const EnvironmentData &_data, Sector* _parent, const LayerPosition &_positionInParent, const uint8_t _layer) : Sector(_data, _parent, _positionInParent), layer(_layer)
+{
 
-Environment::instance = nullptr;
+}
+MinorSector::~MinorSector()
+{
+
+}
+EnvironmentData MinorSector::getData(const ChunkPosition &_position, const uint8_t _layerCounter)
+{
+	if (_layerCounter != 0)
+	{
+		LayerPosition pos;
+		_position.getLayerPosition(&pos, layer);
+		if (!children[pos.x][pos.y])
+		{
+			generateSector(_position, pos.x, pos.y);
+		}
+		return children[pos.x][pos.y]->getData(_position, _layerCounter - 1);
+	}
+	else
+	{
+		return data;
+	}
+}
+void MinorSector::generateSector(const ChunkPosition &_position, const uint8_t _x, const uint8_t _y)
+{
+	numChildren++;
+	
+	EnvironmentData temp;
+	spehs::rng::PRNG64 envRandom(_position.integerX | _position.integerY);
+
+	temp.density = envRandom.uirandom(0, UINT8_MAX) + envRandom.uirandom(parent->data.density / 4, parent->data.density);
+	temp.population = envRandom.uirandom(0, UINT8_MAX) + envRandom.uirandom(parent->data.population / 4, parent->data.population);
+	temp.technology = envRandom.uirandom(0, UINT8_MAX) + envRandom.uirandom(parent->data.technology / 4, parent->data.technology);
+	temp.temperature = envRandom.uirandom(0, UINT8_MAX) + envRandom.uirandom(parent->data.temperature / 4, parent->data.temperature);
+	children[_x][_y] = new Sector(temp, nullptr, LayerPosition(_x, _y));
+}
+
+
+/*
+	ENVIRONMENT
+*/
+Environment* Environment::instance = nullptr;
 void Environment::create(const uint64_t &_worldSeed)
 {
 	if (instance)
@@ -109,55 +169,36 @@ void Environment::destroy()
 		spehs::console::error("No Environment exists!");
 	}
 
-	envDeleteMutex.lock();
 	delete instance;
-	instance == nullptr;
-	envDeleteMutex.unlock();
+	instance = nullptr;
 }
 Environment::Environment(const uint64_t &_worldSeed) : worldRandom(_worldSeed), worldSeed(_worldSeed)
 {
-	//create sector 0
+	EnvironmentData temp;
+	for (unsigned x = 0; x < UINT8_MAX; x++)
+	{
+		for (unsigned y = 0; y < UINT8_MAX; y++)
+		{
+			temp.density = worldRandom.uirandom(0, UINT8_MAX);
+			temp.population = worldRandom.uirandom(0, UINT8_MAX);
+			temp.technology = worldRandom.uirandom(0, UINT8_MAX);
+			temp.temperature = worldRandom.uirandom(0, UINT8_MAX);
+			layer0Sectors[x][y] = new Sector(temp, nullptr, LayerPosition(x, y));
+		}
+	}
 }
 Environment::~Environment()
 {
-
+	SectorTimer::deleteAll();
 }
-
-EnvironmentDataType& Environment::getData(const unsigned char _layer, const unsigned char _x, const unsigned char _y) const
+EnvironmentData Environment::getData(const ChunkPosition &_position, const uint8_t _layerCounter)
 {
-
+	LayerPosition pos;
+	_position.getLayerPosition(&pos, 0);
+	return layer0Sectors[pos.x][pos.y]->getData(_position, _layerCounter - 1);
 }
-Sector Environment::getSector(const unsigned char _layer, const unsigned char _x, const unsigned char _y) const
+spehs::rng::PRNG64 Environment::getEnvRandom()
 {
-	if (_layer == 0)
-	{
-		return layer0Sector;
-	}
-	else
-	{
-		sectorVectorMutex.lock();
-		for (unsigned i = 0; i < sectors.size(); i++)
-		{
-			if (sectors[i].is(_layer, _x, _y))
-			{
-				sectors[i].use();
-				return sectors[i];
-			}
-		}
-		sectorVectorMutex.unlock();
-	}
-	
-	//generate sector
-}
-void Environment::deleteSector(Sector &_sector)
-{
-	sectorVectorMutex.lock();
-	for (unsigned i = 0; i < sectors.size(); i++)
-	{
-		if (sectors[i] == _sector)
-		{
-			sectors.erase(sectors.begin() + i);
-		}
-	}
-	sectorVectorMutex.unlock();
+	worldRandom.reset();
+	return worldRandom;
 }

@@ -1,62 +1,17 @@
 
 #pragma once
 
+#include "WorldPosition.h"
+
 #include <SpehsEngine\RNG.h>
 
 #include <stdint.h>
 #include <vector>
 #include <mutex>
 
-typedef unsigned char EnvironmentDataType;
 
+typedef uint8_t EnvironmentDataType;
 
-class SectorPosition
-{
-public:
-	SectorPosition(const unsigned char _layer, const unsigned char _xInParent, const unsigned char _yInParent)
-		: layer(_layer), xInParent(_xInParent), yInParent(_yInParent) {}
-
-	bool operator==(const SectorPosition &_other)
-	{
-		return layer == _other.layer && xInParent == _other.xInParent && yInParent == _other.yInParent;
-	}
-	
-	const unsigned char layer;
-	const unsigned char xInParent;
-	const unsigned char yInParent;
-};
-
-/*
-	Sector layers:
-	0 is the largers size layer (only one of these exist)
-	7 is the smallest size with one element(pixel) being one chunk in size
-*/
-class Sector
-{
-	friend class Environment;
-public:
-	Sector(const unsigned char _layer, const unsigned char _xInParent, const unsigned char _yInParent, EnvironmentData* _parentPixel);
-	~Sector();
-
-	bool operator==(const Sector &_other);
-
-	const unsigned char getLayer() const;
-	SectorPosition getPosition() const;
-	EnvironmentData getData(const unsigned char &_x, const unsigned char &_y) const;
-
-protected:
-	void use();
-	void drop();
-	bool is(const unsigned char _layer, const unsigned char _xInParent, const unsigned char _yInParent);
-	bool isActive();
-
-private:
-	std::mutex activeMutex;
-	bool active;
-
-	SectorPosition position;
-	EnvironmentData data[256][256];
-};
 
 class EnvironmentData
 {
@@ -67,21 +22,78 @@ public:
 	EnvironmentDataType temperature;
 };
 
+class MinorSector;
+class Sector
+{
+	friend class SectorTimer;
+	friend class MinorSector;
+public:
+	Sector(const EnvironmentData &_data, Sector* _parent, const LayerPosition &_positionInParent);
+	virtual ~Sector();
+	
+	virtual EnvironmentData getData(const ChunkPosition &_position, const uint8_t _layerCounter);
+	virtual int getNumChildren(){ return 0; }
+
+	virtual MinorSector* getAsMinor(){ return nullptr; }
+
+protected:
+	void deleteFromParent();
+	void use();
+	bool drop(); //Called only from sector timer!
+
+	EnvironmentData data;
+
+private:
+	Sector* parent;
+	const LayerPosition positionInParent;
+
+	std::mutex activeMutex;
+	bool active;
+};
+
+class MinorSector : public Sector
+{
+	friend class Sector;
+public:
+	MinorSector(const EnvironmentData &_data, Sector* _parent, const LayerPosition &_positionInParent, const uint8_t _layer);
+	~MinorSector();
+
+	EnvironmentData getData(const ChunkPosition &_position, const uint8_t _layerCounter);
+	int getNumChildren(){ return numChildren; }
+
+	MinorSector* getAsMinor(){ return this; }
+
+protected:
+	const uint8_t layer;
+	int numChildren;
+	Sector*** children;
+
+private:
+	void generateSector(const ChunkPosition &_position, const uint8_t _x, const uint8_t _y);
+};
+
+class SectorTimer
+{
+public:
+	static void sectorTimer();
+	static void deleteAll();
+	static void add(Sector* _sector);
+private:
+	static bool end;
+	static std::vector<Sector*> sectors;
+};
+
+
 class Environment
 {
+	friend class Sector;
 public:
 	static Environment* instance;
 	static void create(const uint64_t &_worldSeed);
 	static void destroy();
 
-	EnvironmentDataType& getData(const unsigned char _layer, const unsigned char _x, const unsigned char _y) const;
-
-	//Layers from 0-7
-	//xy from parent sector (don't matter for 0)
-	Sector getSector(const unsigned char _layer, const unsigned char _xInParent, const unsigned char _yInParent) const;
-
-protected:
-	void deleteSector(Sector &_sector);
+	EnvironmentData getData(const ChunkPosition &_position, const uint8_t _layerCounter);
+	spehs::rng::PRNG64 getEnvRandom();
 
 private:
 	Environment(const uint64_t &_worldSeed);
@@ -91,8 +103,6 @@ private:
 
 	spehs::rng::PRNG64 worldRandom;
 
-	std::mutex sectorVectorMutex;
-	std::vector<Sector> sectors;
-	Sector layer0Sector;
+	Sector* layer0Sectors[256][256];
 };
 
