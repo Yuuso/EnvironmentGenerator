@@ -1,271 +1,163 @@
 
 #include "Environment.h"
-#include "Sector.h"
 
-#include <SpehsEngine/WorldPosition.h>
-#include <SpehsEngine/Exceptions.h>
+#include <SpehsEngine/Console.h>
 
-
-#define POS_MAJOR0(P) (P / MAJOR0_SIZE)
-#define POS_MAJOR1(P) ((P - (POS_MAJOR0(P) * MAJOR0_SIZE)) / MAJOR1_SIZE)
-#define POS_MAJOR2(P) ((P - (POS_MAJOR1(P) * MAJOR1_SIZE)) / MAJOR2_SIZE)
-#define POS_MAJOR3(P) ((P - (POS_MAJOR2(P) * MAJOR2_SIZE)) / MAJOR3_SIZE)
-#define POS_MINOR0(P) ((P - (POS_MAJOR3(P) * MAJOR3_SIZE)) / MINOR0_SIZE)
+#include <thread>
 
 
-#define DEFAULT_DENSITY 50
-#define DEFAULT_TEMPERATURE 25
-#define DEFAULT_TECHNOLOGY 50
+const float SECTOR_TIMER(60.0f);
 
 
-SECTORDATA::SECTORDATA()
+
+std::mutex envDeleteMutex;//To make sure timers stop correctly if environment is deleted
+void sectorTimer(Sector* _sector)
 {
-	density = DEFAULT_DENSITY;
-	temperature = DEFAULT_TEMPERATURE;
-	technology = DEFAULT_TECHNOLOGY;
+	envDeleteMutex.lock();
+	if (!Environment::instance)
+	{
+		envDeleteMutex.unlock();
+		return;
+	}
+	do
+	{
+		_sector->drop();
+		envDeleteMutex.unlock();
+		std::this_thread::sleep_for(std::chrono::seconds(SECTOR_TIMER));
+		envDeleteMutex.lock();
+		if (!Environment::instance)
+		{
+			envDeleteMutex.unlock();
+			return;
+		}
+	} while (_sector->isActive());
+	Environment::instance->deleteSector(_sector);
+	envDeleteMutex.unlock();
 }
 
 
-Environment::Environment(const unsigned int &_seed, spehs::WorldPosition* _simulatedPosition) : worldSeed(_seed), defaultWorldData()
+Sector::Sector(const unsigned char _layer, const unsigned char _xInParent, const unsigned char _yInParent, EnvironmentData* _parentPixel) : position(_layer, _xInParent, _yInParent), active(true)
 {
-	simulatedPosition = _simulatedPosition;
-	envRandom = new spehs::rng::PRNG32(worldSeed);
-	envRandom64 = new spehs::rng::PRNG64(worldSeed);
+	if (_parentPixel)
+	{
+		//generate sector based on parent
 
-	data.minor0.resize(1);
+		std::thread removeTimer(sectorTimer, this);
+	}
+	else
+	{
+		//create 0 sector
+	}
+}
+Sector::~Sector()
+{
+
+}
+
+bool Sector::operator==(const Sector &_other)
+{
+	return position == _other.position;
+}
+
+const unsigned char Sector::getLayer() const
+{
+	return position.layer;
+}
+SectorPosition Sector::getPosition() const
+{
+	return position;
+}
+EnvironmentData Sector::getData(const unsigned char &_x, const unsigned char &_y) const
+{
+	return data[_x][_y];
+}
+void Sector::use()
+{
+	active = true;
+}
+void Sector::drop()
+{
+	active = false;
+}
+bool Sector::is(const unsigned char _layer, const unsigned char _xInParent, const unsigned char _yInParent)
+{
+	return position.layer == _layer && position.xInParent == _xInParent && position.yInParent == _yInParent;
+}
+bool Sector::isActive()
+{
+	activeMutex.lock();
+	bool value = active;
+	activeMutex.unlock();
+	return value;
+}
+
+
+Environment::instance = nullptr;
+void Environment::create(const uint64_t &_worldSeed)
+{
+	if (instance)
+	{
+		spehs::console::error("Environment already created!");
+	}
+
+	instance = new Environment(_worldSeed);
+}
+void Environment::destroy()
+{
+	if (!instance)
+	{
+		spehs::console::error("No Environment exists!");
+	}
+
+	envDeleteMutex.lock();
+	delete instance;
+	instance == nullptr;
+	envDeleteMutex.unlock();
+}
+Environment::Environment(const uint64_t &_worldSeed) : worldRandom(_worldSeed), worldSeed(_worldSeed)
+{
+	//create sector 0
 }
 Environment::~Environment()
 {
-	delete envRandom;
-	delete envRandom64;
+
 }
 
-void Environment::update()
+EnvironmentDataType& Environment::getData(const unsigned char _layer, const unsigned char _x, const unsigned char _y) const
 {
-	data.minor0.clear();
-	data.minor0.resize(1);
-	data.minor0[0] = getSectorFrom(MINOR0, *simulatedPosition);
-}
 
-std::shared_ptr<SECTORDATA> Environment::getData(const spehs::WorldPosition& _position)
-{
-	//Returns a shared_ptr, which means that environment doesn't have to worry about data that the game uses. (Sectors may be deleted)
-	return getSectorFrom(MINOR0, _position)->getData();
 }
-
-spehs::rng::PRNG32* Environment::getEnvRandom()
+Sector Environment::getSector(const unsigned char _layer, const unsigned char _x, const unsigned char _y) const
 {
-	envRandom->reset();
-	return envRandom;
-}
-spehs::rng::PRNG64* Environment::getEnvRandom64()
-{
-	envRandom64->reset();
-	return envRandom64;
-}
-const unsigned int Environment::getWorldSeed() const
-{
-	return worldSeed;
-}
-
-
-//Protected:
-std::shared_ptr<Sector> Environment::generateSector(const SECTORTYPE _type, const spehs::WorldPosition& _position)
-{
-	std::shared_ptr<Sector> parent;
-	std::shared_ptr<Sector> result;
-	int discard;
-	switch (_type)
+	if (_layer == 0)
 	{
-	case MAJOR0:
-		parent = nullptr;
-		envRandom->reset();
-		discard = POS_MAJOR0(_position.integerY) * MAJOR_SIZE + POS_MAJOR0(_position.integerX);
-		if (discard < 0)
-			discard = (MAJOR_SIZE * MAJOR_SIZE) / 2 + abs(discard);
-		envRandom->discardNext(discard);
-		result = std::shared_ptr<Sector>(new Sector(parent, POS_MAJOR0(_position.integerX), POS_MAJOR0(_position.integerY), envRandom->uirandom(), 0, this));
-		break;
-
-	case MAJOR1:
-		parent = getSectorFrom(MAJOR0, _position);
-		envRandom->reset();
-		discard = POS_MAJOR1(_position.integerY) * MAJOR_SIZE + POS_MAJOR1(_position.integerX);
-		if (discard < 0)
-			discard = (MAJOR_SIZE * MAJOR_SIZE) / 2 + abs(discard);
-		envRandom->discardNext(discard);
-		result = std::shared_ptr<Sector>(new Sector(parent, POS_MAJOR1(_position.integerX), POS_MAJOR1(_position.integerY), envRandom->uirandom(), 1, this));
-		break;
-
-	case MAJOR2:
-		parent = getSectorFrom(MAJOR1, _position);
-		envRandom->reset();
-		discard = POS_MAJOR2(_position.integerY) * MAJOR_SIZE + POS_MAJOR2(_position.integerX);
-		if (discard < 0)
-			discard = (MAJOR_SIZE * MAJOR_SIZE) / 2 + abs(discard);
-		envRandom->discardNext(discard);
-		result = std::shared_ptr<Sector>(new Sector(parent, POS_MAJOR2(_position.integerX), POS_MAJOR2(_position.integerY), envRandom->uirandom(), 2, this));
-		break;
-
-	case MAJOR3:
-		parent = getSectorFrom(MAJOR2, _position);
-		envRandom->reset();
-		discard = POS_MAJOR3(_position.integerY) * MAJOR_SIZE + POS_MAJOR3(_position.integerX);
-		if (discard < 0)
-			discard = (MAJOR_SIZE * MAJOR_SIZE) / 2 + abs(discard);
-		envRandom->discardNext(discard);
-		result = std::shared_ptr<Sector>(new Sector(parent, POS_MAJOR3(_position.integerX), POS_MAJOR3(_position.integerY), envRandom->uirandom(), 3, this));
-		break;
-
-	case MINOR0:
-		parent = getSectorFrom(MAJOR3, _position);
-		envRandom->reset();
-		discard = POS_MINOR0(_position.integerY) * MINOR_SIZE + POS_MINOR0(_position.integerX);
-		if (discard < 0)
-			discard = (MINOR_SIZE * MINOR_SIZE) / 2 + abs(discard);
-		envRandom->discardNext(discard);
-		result = std::shared_ptr<Sector>(new Sector(parent, POS_MINOR0(_position.integerX), POS_MINOR0(_position.integerY), envRandom->uirandom(), 4, this));
-		break;
-
-	default:
-		spehs::exceptions::fatalError("Invalid SECTORTYPE in getSectorFrom (Environment)!");
-		break;
+		return layer0Sector;
 	}
-	return result;
-}
-std::shared_ptr<Sector> Environment::getSectorFrom(const SECTORTYPE _type, const spehs::WorldPosition& _position)
-{
-	switch (_type)
+	else
 	{
-	case MAJOR0:
-		for (unsigned i = 0; i < data.major0.size(); i++)
+		sectorVectorMutex.lock();
+		for (unsigned i = 0; i < sectors.size(); i++)
 		{
-			if (data.major0[i] == nullptr)
+			if (sectors[i].is(_layer, _x, _y))
 			{
-				continue;
-			}
-			if (data.major0[i]->checkPosition(POS_MAJOR0(_position.integerX), POS_MAJOR0(_position.integerY)))
-			{
-				return data.major0[i];
+				sectors[i].use();
+				return sectors[i];
 			}
 		}
-		break;
-
-	case MAJOR1:
-		for (unsigned i = 0; i < data.major1.size(); i++)
-		{
-			if (data.major1[i] == nullptr)
-			{
-				continue;
-			}
-			if (data.major1[i]->checkPosition(POS_MAJOR1(_position.integerX), POS_MAJOR1(_position.integerX)))
-			{
-				return data.major1[i];
-			}
-		}
-		break;
-
-	case MAJOR2:
-		for (unsigned i = 0; i < data.major2.size(); i++)
-		{
-			if (data.major2[i] == nullptr)
-			{
-				continue;
-			}
-			if (data.major2[i]->checkPosition(POS_MAJOR2(_position.integerX), POS_MAJOR2(_position.integerX)))
-			{
-				return data.major2[i];
-			}
-		}
-		break;
-
-	case MAJOR3:
-		for (unsigned i = 0; i < data.major3.size(); i++)
-		{
-			if (data.major3[i] == nullptr)
-			{
-				continue;
-			}
-			if (data.major3[i]->checkPosition(POS_MAJOR3(_position.integerX), POS_MAJOR3(_position.integerX)))
-			{
-				return data.major3[i];
-			}
-		}
-		break;
-
-	case MINOR0:
-		for (unsigned i = 0; i < data.minor0.size(); i++)
-		{
-			if (data.minor0[i] == nullptr)
-			{
-				continue;
-			}
-			if (data.minor0[i]->checkPosition(POS_MINOR0(_position.integerX), POS_MINOR0(_position.integerX)))
-			{
-				return data.minor0[i];
-			}
-		}
-		break;
-
-	default:
-		spehs::exceptions::fatalError("Invalid SECTORTYPE in getSectorFrom (Environment)!");
-		break;
+		sectorVectorMutex.unlock();
 	}
-	std::shared_ptr<Sector> result;
-	result = generateSector(_type, _position);
-	return result;
+	
+	//generate sector
 }
-std::shared_ptr<Sector> Environment::getAdjacent(const std::shared_ptr<Sector>& _sector, const DIRECTION _direction)
+void Environment::deleteSector(Sector &_sector)
 {
-	switch (_direction)
+	sectorVectorMutex.lock();
+	for (unsigned i = 0; i < sectors.size(); i++)
 	{
-	case Environment::DOWN:
-		return getSectorFrom((SECTORTYPE) _sector->layer, getWorldPosition(*_sector, 0, -1));
-		break;
-
-	case Environment::UP:
-		return getSectorFrom((SECTORTYPE) _sector->layer, getWorldPosition(*_sector, 0, 1));
-		break;
-
-	case Environment::RIGHT:
-		return getSectorFrom((SECTORTYPE) _sector->layer, getWorldPosition(*_sector, 1, 0));
-		break;
-
-	case Environment::LEFT:
-		return getSectorFrom((SECTORTYPE) _sector->layer, getWorldPosition(*_sector, -1, 0));
-		break;
-
-	default:
-		spehs::exceptions::fatalError("Invalid DIRECTION in getAdjacent (Environment)!");
-		break;
+		if (sectors[i] == _sector)
+		{
+			sectors.erase(sectors.begin() + i);
+		}
 	}
-}
-spehs::WorldPosition Environment::getWorldPosition(const Sector& _sector, const int16_t _xInc, const int16_t _yInc)
-{
-	switch (_sector.layer)
-	{
-	case MAJOR0:
-		return spehs::WorldPosition((_sector.xInP + _xInc) * MAJOR0_SIZE, (_sector.yInP + _yInc) * MAJOR0_SIZE);
-		break;
-
-	case MAJOR1:
-		return spehs::WorldPosition((_sector.xInP + _xInc) * MAJOR1_SIZE, (_sector.yInP + _yInc) * MAJOR1_SIZE) + getWorldPosition(*_sector.parent);
-		break;
-
-	case MAJOR2:
-		return spehs::WorldPosition((_sector.xInP + _xInc) * MAJOR2_SIZE, (_sector.yInP + _yInc) * MAJOR2_SIZE) + getWorldPosition(*_sector.parent);
-		break;
-
-	case MAJOR3:
-		return spehs::WorldPosition((_sector.xInP + _xInc) * MAJOR3_SIZE, (_sector.yInP + _yInc) * MAJOR3_SIZE) + getWorldPosition(*_sector.parent);
-		break;
-
-	case MINOR0:
-		return spehs::WorldPosition((_sector.xInP + _xInc) * MINOR0_SIZE, (_sector.yInP + _yInc) * MINOR0_SIZE) + getWorldPosition(*_sector.parent);
-		break;
-
-	default:
-		spehs::exceptions::fatalError("Invalid SECTORTYPE in getWorldPosition (Environment)!");
-		break;
-	}
+	sectorVectorMutex.unlock();
 }

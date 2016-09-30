@@ -1,6 +1,4 @@
 
-#include "Environment.h"
-
 #include <SpehsEngine/SpehsEngine.h>
 #include <SpehsEngine/Window.h>
 #include <SpehsEngine/Console.h>
@@ -13,16 +11,11 @@
 #include <iostream>
 
 
-extern int64_t sectorAllocations;
-extern int64_t sectorDeallocations;
-
-
 static bool run = true;
 
 spehs::Camera2D* camera;
 spehs::BatchManager* batchManager;
-Environment* environment;
-spehs::WorldPosition location(0, 0);
+
 
 void init()
 {
@@ -33,14 +26,11 @@ void init()
 	batchManager = new spehs::BatchManager(camera);
 	spehs::setActiveBatchManager(batchManager);
 	mainWindow->clearColor(0.0f, 0.0f, 0.0f, 1.0f);
-
-	environment = new Environment(0, &location);
 }
 void uninit()
 {
 	delete batchManager;
 	delete camera;
-	delete environment;
 	spehs::uninitialize();
 }
 bool input()
@@ -90,8 +80,6 @@ bool update()
 	if (!input())
 		return false;
 	camera->update();
-	location.setPosition(camera->position.x, camera->position.y);
-	environment->update();
 	spehs::console::update();
 
 	return true;
@@ -117,8 +105,6 @@ int main(char argc, char** argv)
 	}
 	uninit();
 
-	std::cout << "Sector Allocations: " << sectorAllocations - sectorDeallocations << "/" << sectorAllocations << std::endl;
 	std::cin.ignore();
-
 	return 0;
 }

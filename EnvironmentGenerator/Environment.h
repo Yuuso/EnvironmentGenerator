@@ -1,93 +1,98 @@
 
 #pragma once
 
-#include <SpehsEngine/RNG.h>
+#include <SpehsEngine\RNG.h>
 
 #include <stdint.h>
-#include <memory>
 #include <vector>
+#include <mutex>
+
+typedef unsigned char EnvironmentDataType;
 
 
-//Amount of sectors per side
-#define MAJOR_SIZE 4096
-#define MINOR_SIZE 256
+class SectorPosition
+{
+public:
+	SectorPosition(const unsigned char _layer, const unsigned char _xInParent, const unsigned char _yInParent)
+		: layer(_layer), xInParent(_xInParent), yInParent(_yInParent) {}
 
-//Size of the sectors side
-#define MAJOR0_SIZE (UINT64_MAX/MAJOR_SIZE)
-#define MAJOR1_SIZE (MAJOR0_SIZE/MAJOR_SIZE)
-#define MAJOR2_SIZE (MAJOR1_SIZE/MAJOR_SIZE)
-#define MAJOR3_SIZE (MAJOR2_SIZE/MAJOR_SIZE)
-#define MINOR0_SIZE (MAJOR3_SIZE/MINOR_SIZE)
-
-namespace spehs{ class WorldPosition; }
-class Sector;
-
+	bool operator==(const SectorPosition &_other)
+	{
+		return layer == _other.layer && xInParent == _other.xInParent && yInParent == _other.yInParent;
+	}
+	
+	const unsigned char layer;
+	const unsigned char xInParent;
+	const unsigned char yInParent;
+};
 
 /*
-	((((2^64) / 4096) / 4096) / 4096) / 4096) / 256 = 256
+	Sector layers:
+	0 is the largers size layer (only one of these exist)
+	7 is the smallest size with one element(pixel) being one chunk in size
 */
-struct EnvironmentData
+class Sector
 {
-	std::vector<std::shared_ptr<Sector>> major0; //Divides into majors
-	std::vector<std::shared_ptr<Sector>> major1; //Divides into majors
-	std::vector<std::shared_ptr<Sector>> major2; //Divides into majors
-	std::vector<std::shared_ptr<Sector>> major3; //Divides into minors
+	friend class Environment;
+public:
+	Sector(const unsigned char _layer, const unsigned char _xInParent, const unsigned char _yInParent, EnvironmentData* _parentPixel);
+	~Sector();
 
-	std::vector<std::shared_ptr<Sector>> minor0; //Field Sectors
+	bool operator==(const Sector &_other);
+
+	const unsigned char getLayer() const;
+	SectorPosition getPosition() const;
+	EnvironmentData getData(const unsigned char &_x, const unsigned char &_y) const;
+
+protected:
+	void use();
+	void drop();
+	bool is(const unsigned char _layer, const unsigned char _xInParent, const unsigned char _yInParent);
+	bool isActive();
+
+private:
+	std::mutex activeMutex;
+	bool active;
+
+	SectorPosition position;
+	EnvironmentData data[256][256];
 };
 
-enum SECTORTYPE : uint8_t
+class EnvironmentData
 {
-	MAJOR0 = 0,
-	MAJOR1 = 1,
-	MAJOR2 = 2,
-	MAJOR3 = 3,
-
-	MINOR0 = 4,
+public:
+	EnvironmentDataType population;
+	EnvironmentDataType density;
+	EnvironmentDataType technology;
+	EnvironmentDataType temperature;
 };
-
-typedef uint8_t SectorDataType;
-
-struct SECTORDATA
-{
-	SECTORDATA();
-	SectorDataType density;
-	SectorDataType temperature;
-	SectorDataType technology;
-	//Something for asteroid building?
-};
-
 
 class Environment
 {
-	friend class Sector;
 public:
-	Environment(const unsigned int &_seed, spehs::WorldPosition* _simulatedPosition);
-	~Environment();
+	static Environment* instance;
+	static void create(const uint64_t &_worldSeed);
+	static void destroy();
 
-	void update();
+	EnvironmentDataType& getData(const unsigned char _layer, const unsigned char _x, const unsigned char _y) const;
 
-	//Get SECTORDATA from any part of the world
-	std::shared_ptr<SECTORDATA> getData(const spehs::WorldPosition& _position);
-
-	spehs::rng::PRNG32* getEnvRandom();
-	spehs::rng::PRNG64* getEnvRandom64();
-	const unsigned int getWorldSeed() const;
+	//Layers from 0-7
+	//xy from parent sector (don't matter for 0)
+	Sector getSector(const unsigned char _layer, const unsigned char _xInParent, const unsigned char _yInParent) const;
 
 protected:
-	std::shared_ptr<Sector> generateSector(const SECTORTYPE _type, const spehs::WorldPosition& _position);
-	std::shared_ptr<Sector> getSectorFrom(const SECTORTYPE _type, const spehs::WorldPosition& _position);
-
-	enum DIRECTION : uint8_t { DOWN, UP, RIGHT, LEFT };
-	std::shared_ptr<Sector> getAdjacent(const std::shared_ptr<Sector>& _sector, const DIRECTION _direction);
-	spehs::WorldPosition getWorldPosition(const Sector& _sector, const int16_t _xInc = 0, const int16_t _yInc = 0);
-
-	EnvironmentData data;
+	void deleteSector(Sector &_sector);
 
 private:
-	const unsigned int worldSeed;
-	const SECTORDATA defaultWorldData;
-	spehs::WorldPosition* simulatedPosition;
-	spehs::rng::PRNG32* envRandom;
-	spehs::rng::PRNG64* envRandom64;
+	Environment(const uint64_t &_worldSeed);
+	~Environment();
+
+	uint64_t worldSeed;
+
+	spehs::rng::PRNG64 worldRandom;
+
+	std::mutex sectorVectorMutex;
+	std::vector<Sector> sectors;
+	Sector layer0Sector;
 };
+
