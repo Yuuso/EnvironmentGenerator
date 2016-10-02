@@ -8,6 +8,8 @@
 #include <SpehsEngine/InputManager.h>
 #include <SpehsEngine/Time.h>
 
+#include "Environment.h"
+
 #include <iostream>
 
 

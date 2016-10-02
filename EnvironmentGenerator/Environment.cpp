@@ -6,7 +6,7 @@
 #include <thread>
 
 
-const int SECTOR_TIMER(60);
+const int SECTOR_TIMER(90);
 
 
 bool SectorTimer::end = false;
@@ -67,7 +67,6 @@ void SectorTimer::add(Sector* _sector)
 */
 Sector::Sector(const EnvironmentData &_data, Sector* _parent, const LayerPosition &_positionInParent) : data(_data), parent(_parent), positionInParent(_positionInParent), active(true)
 {
-
 	SectorTimer::add(this);
 }
 Sector::~Sector()
@@ -111,11 +110,27 @@ bool Sector::drop()
 
 MinorSector::MinorSector(const EnvironmentData &_data, Sector* _parent, const LayerPosition &_positionInParent, const uint8_t _layer) : Sector(_data, _parent, _positionInParent), layer(_layer)
 {
-
+	children = new Sector**[256];
+	for (unsigned x = 0; x < 256; x++)
+	{
+		children[x] = new Sector*[256];
+	}
+	for (unsigned x = 0; x < 256; x++)
+	{
+		for (unsigned y = 0; y < 256; y++)
+		{
+			children[x][y] = nullptr;
+		}
+	}
 }
 MinorSector::~MinorSector()
 {
-
+	//Sectors themselves are removed in timer.
+	for (unsigned i = 0; i < 256; i++)
+	{
+		delete[] children[i];
+	}
+	delete[] children;
 }
 EnvironmentData MinorSector::getData(const ChunkPosition &_position, const uint8_t _layerCounter)
 {
@@ -153,6 +168,7 @@ void MinorSector::generateSector(const ChunkPosition &_position, const uint8_t _
 	ENVIRONMENT
 */
 Environment* Environment::instance = nullptr;
+std::thread* removeTimer;
 void Environment::create(const uint64_t &_worldSeed)
 {
 	if (instance)
@@ -161,6 +177,8 @@ void Environment::create(const uint64_t &_worldSeed)
 	}
 
 	instance = new Environment(_worldSeed);
+
+	removeTimer = new std::thread(SectorTimer::sectorTimer);
 }
 void Environment::destroy()
 {
@@ -169,8 +187,13 @@ void Environment::destroy()
 		spehs::console::error("No Environment exists!");
 	}
 
+	SectorTimer::deleteAll();
+
 	delete instance;
 	instance = nullptr;
+
+	removeTimer->join();
+	delete removeTimer;
 }
 Environment::Environment(const uint64_t &_worldSeed) : worldRandom(_worldSeed), worldSeed(_worldSeed)
 {
@@ -189,7 +212,7 @@ Environment::Environment(const uint64_t &_worldSeed) : worldRandom(_worldSeed), 
 }
 Environment::~Environment()
 {
-	SectorTimer::deleteAll();
+
 }
 EnvironmentData Environment::getData(const ChunkPosition &_position, const uint8_t _layerCounter)
 {
